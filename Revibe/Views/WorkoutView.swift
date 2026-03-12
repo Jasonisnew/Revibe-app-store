@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct WorkoutView: View {
     let movementName: String
@@ -11,6 +12,12 @@ struct WorkoutView: View {
     @Binding var path: [Route]
 
     @StateObject private var viewModel = WorkoutViewModel()
+    @State private var cameraManager = CameraManager()
+    @State private var poseService = PoseLandmarkerService()
+    @State private var lateralRaiseAnalyzer = LateralRaiseAnalyzer()
+    @State private var posePipelineCancellable: AnyCancellable?
+    @State private var noPoseTimer: Timer? = nil
+    @State private var lastDetectionTime: Date = .distantPast
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,10 +40,13 @@ struct WorkoutView: View {
             .padding(.top, DS.Spacing.sm)
             .padding(.bottom, DS.Spacing.sm)
 
-            // Progress bar
+            // Progress bar and rep count
             HStack(spacing: DS.Spacing.xs) {
                 ProgressView(value: viewModel.progress)
                     .progressViewStyle(LinearProgressViewStyle(tint: DS.Colors.accent))
+                Text("\(viewModel.repCount) reps")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(DS.Colors.textMuted)
                 Text("\(Int(viewModel.progress * 100))%")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(DS.Colors.textMuted)
@@ -46,11 +56,21 @@ struct WorkoutView: View {
             .padding(.horizontal, DS.Spacing.md)
             .padding(.bottom, DS.Spacing.sm)
 
-            // Camera placeholder
-            CameraPlaceholderView()
-                .frame(maxWidth: .infinity)
-                .frame(height: 370)
-                .padding(.horizontal, DS.Spacing.md)
+            // Live camera feed + pose overlay
+            GeometryReader { geo in
+                ZStack {
+                    CameraPreviewView(cameraManager: cameraManager)
+
+                    PoseOverlayView(
+                        landmarks: viewModel.lastLandmarks,
+                        size: geo.size
+                    )
+                }
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 370)
+            .padding(.horizontal, DS.Spacing.md)
 
             Spacer()
 
@@ -105,10 +125,53 @@ struct WorkoutView: View {
             }
         }
         .onAppear {
-            viewModel.startSession()
+            lateralRaiseAnalyzer.setTargetReps(10)
+            viewModel.startSession(usePoseDriven: true)
+            cameraManager.startSession()
+            startPosePipeline()
+            startNoPoseWatchdog()
         }
         .onDisappear {
+            posePipelineCancellable = nil
+            noPoseTimer?.invalidate()
+            noPoseTimer = nil
             viewModel.stopSession()
+            cameraManager.stopSession()
+            lateralRaiseAnalyzer.reset()
+        }
+    }
+
+    private func startPosePipeline() {
+        let queue = DispatchQueue(label: "com.revibe.pose.pipeline")
+        posePipelineCancellable = cameraManager.frameSubject
+            .receive(on: queue)
+            .compactMap { [poseService] pixelBuffer in
+                poseService.detect(pixelBuffer: pixelBuffer)
+            }
+            .receive(on: DispatchQueue.main)
+            .compactMap { [lateralRaiseAnalyzer] landmarks in
+                lateralRaiseAnalyzer.analyze(landmarks: landmarks)
+            }
+            .sink { [self] result in
+                lastDetectionTime = Date()
+                viewModel.updateFromPose(
+                    feedback: result.feedbackText,
+                    repCount: result.repCount,
+                    progress: result.progress,
+                    landmarks: result.landmarks
+                )
+            }
+    }
+
+    /// Shows "Move into frame" if no pose is detected for more than 1.5 seconds.
+    private func startNoPoseWatchdog() {
+        lastDetectionTime = Date()
+        noPoseTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            let gap = Date().timeIntervalSince(lastDetectionTime)
+            if gap > 1.5 {
+                viewModel.feedbackText = "Move into frame"
+                viewModel.lastLandmarks = nil
+            }
         }
     }
 }

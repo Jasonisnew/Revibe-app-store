@@ -43,16 +43,14 @@ final class LateralRaiseAnalyzer {
 
     /// Correct arm-height range relative to horizontal (0° = perfectly level).
     /// Negative means arm is below shoulder; positive means arm is above shoulder.
-    var correctMin: Double = -50
-    var correctMax: Double = 50
+    var correctMin: Double = -40
+    var correctMax: Double =  40
 
     /// Arms are considered "at rest / down" when their signed angle is below this.
-    /// -65° ≈ arm hanging roughly at the side (not quite vertical because the body tapers).
-    var restThreshold: Double = -65
+    var restThreshold: Double = -45
 
     /// Arms are considered "at the top" (rep triggered) when signed angle is ≥ this.
-    /// Set to correctMin so the rep counts as soon as the arm enters the correct zone.
-    var peakThreshold: Double = -15
+    var peakThreshold: Double = -25
 
     /// Elbow angle below this → arm is too bent (interior angle at elbow joint).
     var elbowBentThreshold: Double = 140

@@ -14,21 +14,50 @@ struct MovementCardView: View {
         return DS.Colors.cardPalette[index]
     }
 
+    // #region agent log
+    private func writeLog(_ payload: String) {
+        let path = "/Users/jasonliu/Desktop/Revibe-app-store/.cursor/debug-fefa6b.log"
+        let line = payload + "\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: path) {
+            if let fh = FileHandle(forWritingAtPath: path) { fh.seekToEndOfFile(); fh.write(data); fh.closeFile() }
+        } else {
+            FileManager.default.createFile(atPath: path, contents: data, attributes: nil)
+        }
+    }
+    // #endregion agent log
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Status badge
-            HStack {
+            HStack(alignment: .center, spacing: 4) {
                 if movement.isAvailable {
-                    Label("Available", systemImage: "checkmark")
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(DS.Colors.accent)
+                    Text("Available")
                         .font(.caption.weight(.medium))
                         .foregroundColor(DS.Colors.accent)
                 } else {
-                    Label("Locked", systemImage: "lock.fill")
+                    Image(systemName: "lock.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(DS.Colors.textMuted)
+                    Text("Locked")
                         .font(.caption.weight(.medium))
                         .foregroundColor(DS.Colors.textMuted)
                 }
                 Spacer()
             }
+            .frame(height: 16)
+            // #region agent log
+            .background(GeometryReader { geo in
+                Color.clear.onAppear {
+                    let f = geo.frame(in: .global)
+                    let ts = Int(Date().timeIntervalSince1970 * 1000)
+                    self.writeLog("{\"sessionId\":\"fefa6b\",\"hypothesisId\":\"H-A\",\"location\":\"MovementCardView:badge\",\"message\":\"badge global frame\",\"data\":{\"name\":\"\(movement.name)\",\"globalMinY\":\(f.minY),\"globalMaxY\":\(f.maxY),\"height\":\(f.height)},\"timestamp\":\(ts)}")
+                }
+            })
+            // #endregion agent log
 
             Text(movement.name)
                 .font(.system(size: 15, weight: .medium, design: .serif))
@@ -38,13 +67,15 @@ struct MovementCardView: View {
 
             // Icon area
             ZStack {
-                RoundedRectangle(cornerRadius: DS.Radius.card)
+                RoundedRectangle(cornerRadius: 40)
                     .fill(DS.Colors.bgPrimary.opacity(0.45))
                     .frame(height: 88)
                 Image(systemName: movement.iconName)
                     .font(.system(size: 38))
                     .foregroundColor(movement.isAvailable ? DS.Colors.textPrimary : DS.Colors.textMuted)
             }
+
+            Spacer()
 
             // Start button
             Button(action: onStartSession) {
@@ -60,9 +91,9 @@ struct MovementCardView: View {
         }
         .padding(DS.Spacing.sm)
         .background(cardColor)
-        .cornerRadius(DS.Radius.card)
+        .cornerRadius(40)
         .opacity(movement.isAvailable ? 1.0 : 0.6)
-        .frame(width: 165)
+        .frame(width: 165, height: 230)
     }
 }
 

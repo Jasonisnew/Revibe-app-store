@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Combine
+import Supabase
 
 struct WorkoutView: View {
     let movementName: String
@@ -97,6 +98,7 @@ struct WorkoutView: View {
 
                 Button {
                     viewModel.stopSession()
+                    Task { await recordCompletion() }
                     path.append(.summary(
                         streak: streak,
                         duration: viewModel.elapsedTime,
@@ -161,6 +163,25 @@ struct WorkoutView: View {
                     landmarks: result.landmarks
                 )
             }
+    }
+
+    private func recordCompletion() async {
+        do {
+            let userId = try await supabase.auth.session.user.id.uuidString
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+            let completion = WorkoutCompletion(
+                userId: userId,
+                completedAt: formatter.string(from: Date()),
+                timezone: TimeZone.current.identifier
+            )
+
+            try await supabase
+                .from("workout_completions")
+                .insert(completion)
+                .execute()
+        } catch { }
     }
 
     /// Shows "Move into frame" if no pose is detected for more than 1.5 seconds.

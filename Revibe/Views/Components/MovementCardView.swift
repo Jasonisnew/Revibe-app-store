@@ -28,7 +28,7 @@ struct MovementCardView: View {
     // #endregion agent log
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // Status badge
             HStack(alignment: .center, spacing: 4) {
                 if movement.isAvailable {
@@ -49,33 +49,24 @@ struct MovementCardView: View {
                 Spacer()
             }
             .frame(height: 16)
-            // #region agent log
-            .background(GeometryReader { geo in
-                Color.clear.onAppear {
-                    let f = geo.frame(in: .global)
-                    let ts = Int(Date().timeIntervalSince1970 * 1000)
-                    self.writeLog("{\"sessionId\":\"fefa6b\",\"hypothesisId\":\"H-A\",\"location\":\"MovementCardView:badge\",\"message\":\"badge global frame\",\"data\":{\"name\":\"\(movement.name)\",\"globalMinY\":\(f.minY),\"globalMaxY\":\(f.maxY),\"height\":\(f.height)},\"timestamp\":\(ts)}")
-                }
-            })
-            // #endregion agent log
 
             Text(movement.name)
                 .font(.system(size: 15, weight: .medium, design: .serif))
                 .foregroundColor(DS.Colors.textPrimary)
                 .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: 36, alignment: .topLeading)
 
             // Icon area
             ZStack {
                 RoundedRectangle(cornerRadius: 40)
                     .fill(DS.Colors.bgPrimary.opacity(0.45))
-                    .frame(height: 88)
+                    .frame(height: 80)
                 Image(systemName: movement.iconName)
-                    .font(.system(size: 38))
+                    .font(.system(size: 36))
                     .foregroundColor(movement.isAvailable ? DS.Colors.textPrimary : DS.Colors.textMuted)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
             // Start button
             Button(action: onStartSession) {
@@ -90,10 +81,10 @@ struct MovementCardView: View {
             .disabled(!movement.isAvailable)
         }
         .padding(DS.Spacing.sm)
+        .frame(width: 165, height: 240)
         .background(cardColor)
-        .cornerRadius(40)
+        .clipShape(RoundedRectangle(cornerRadius: 40))
         .opacity(movement.isAvailable ? 1.0 : 0.6)
-        .frame(width: 165, height: 230)
     }
 }
 

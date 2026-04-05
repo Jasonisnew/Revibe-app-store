@@ -33,8 +33,8 @@ struct AuthView: View {
 
             VStack(spacing: 12) {
                 if isSignUp {
-                    TextField("", text: $displayName, prompt: Text("Display name").foregroundColor(.black.opacity(0.5)))
-                        .foregroundColor(.black)
+                    TextField("", text: $displayName, prompt: Text("Display name").foregroundColor(DS.Colors.textMuted))
+                        .foregroundColor(DS.Colors.textPrimary)
                         .textContentType(.name)
                         .autocorrectionDisabled()
                         .padding(12)
@@ -46,8 +46,8 @@ struct AuthView: View {
                         )
                 }
 
-                TextField("", text: $email, prompt: Text("Email").foregroundColor(.black.opacity(0.5)))
-                    .foregroundColor(.black)
+                TextField("", text: $email, prompt: Text("Email").foregroundColor(DS.Colors.textMuted))
+                    .foregroundColor(DS.Colors.textPrimary)
                     .textContentType(.emailAddress)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
@@ -60,8 +60,8 @@ struct AuthView: View {
                             .stroke(DS.Colors.border, lineWidth: 1)
                     )
 
-                SecureField("", text: $password, prompt: Text("Password").foregroundColor(.black.opacity(0.5)))
-                    .foregroundColor(.black)
+                SecureField("", text: $password, prompt: Text("Password").foregroundColor(DS.Colors.textMuted))
+                    .foregroundColor(DS.Colors.textPrimary)
                     .textContentType(isSignUp ? .newPassword : .password)
                     .padding(12)
                     .background(DS.Colors.bgSecondary)
@@ -76,7 +76,7 @@ struct AuthView: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
-                    .foregroundColor(DS.Colors.accent)
+                    .foregroundColor(DS.Colors.error)
                     .padding(.top, DS.Spacing.xs)
                     .padding(.horizontal, DS.Spacing.md)
             }
@@ -89,16 +89,16 @@ struct AuthView: View {
                 Group {
                     if isLoading {
                         ProgressView()
-                            .tint(.white)
+                            .tint(DS.Colors.textOnAccent)
                     } else {
                         Text(isSignUp ? "Sign Up" : "Sign In")
                     }
                 }
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white)
+                .foregroundColor(DS.Colors.textOnAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(DS.Colors.textPrimary)
+                .background(DS.Colors.accent)
                 .cornerRadius(DS.Radius.button)
             }
             .disabled(isLoading)
@@ -138,7 +138,8 @@ struct AuthView: View {
                 try await supabase.auth.signUp(
                     email: email,
                     password: password,
-                    data: ["display_name": .string(displayName)]
+                    data: ["display_name": .string(displayName)],
+                    redirectTo: URL(string: "revibe://auth/callback")
                 )
             } else {
                 try await supabase.auth.signIn(

@@ -11,81 +11,74 @@ struct HomeView: View {
     @Binding var path: [Route]
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DS.Spacing.md) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(viewModel.greeting)
-                            .font(.system(size: 34, weight: .regular, design: .serif))
-                            .foregroundColor(DS.Colors.textPrimary)
-                            .tracking(-0.5)
-                        Text(viewModel.subtitle)
-                            .font(.subheadline)
-                            .foregroundColor(DS.Colors.textMuted)
-                    }
-                    .padding(.top, DS.Spacing.xs)
+        ScrollView {
+            VStack(alignment: .leading, spacing: DS.Spacing.sm) {
 
-                    StreakBannerView(streak: viewModel.streak)
-
-                    Divider()
-                        .overlay(DS.Colors.border)
-
-                    VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                        Text("Movement")
-                            .font(.system(size: 22, weight: .medium, design: .serif))
-                            .foregroundColor(DS.Colors.textPrimary)
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: DS.Spacing.sm) {
-                                ForEach(viewModel.movements) { movement in
-                                    MovementCardView(movement: movement) {
-                                        path.append(.workout(movementName: movement.name))
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 1)
-                            .padding(.vertical, 2)
+                // 1. Compact greeting + streak badge + progress bar
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(viewModel.greeting)
+                                .font(.system(size: 26, weight: .regular, design: .serif))
+                                .foregroundColor(DS.Colors.textPrimary)
+                                .tracking(-0.3)
+                            Text(viewModel.subtitle)
+                                .font(.subheadline)
+                                .foregroundColor(DS.Colors.textMuted)
                         }
-                    }
-                }
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.bottom, DS.Spacing.md)
-            }
-            .background(DS.Colors.bgPrimary.ignoresSafeArea())
-            .navigationTitle("Revibe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(DS.Colors.bgPrimary, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.light, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Revibe")
-                        .font(.system(size: 18, weight: .medium, design: .serif))
-                        .foregroundColor(DS.Colors.textPrimary)
-                }
-            }
-            .task {
-                await viewModel.loadUserData()
-            }
 
-            Button {
-                Task { try? await supabase.auth.signOut() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text("Sign Out")
-                        .font(.subheadline.weight(.semibold))
+                        Spacer()
+
+                        StreakBadge(streak: viewModel.streak)
+                    }
+
+                    WeeklyProgressBar(
+                        completedThisWeek: viewModel.completedThisWeek,
+                        totalWorkouts: viewModel.plan?.days.count ?? 4
+                    )
                 }
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(DS.Colors.accent)
-                .cornerRadius(DS.Radius.button)
-                .shadow(color: DS.Colors.accent.opacity(0.4), radius: 6, x: 0, y: 3)
+                .padding(.top, 4)
+
+                // 2. Today's workout hero card
+                if let todayDay = viewModel.todayDay, let plan = viewModel.plan {
+                    TodayWorkoutCard(
+                        day: todayDay,
+                        planSummary: plan.description,
+                        onStart: {
+                            if let movement = viewModel.movements.first(where: { $0.isAvailable }) {
+                                path.append(.workout(movementName: movement.name))
+                            }
+                        }
+                    )
+                }
+
+                // 4. Weekly plan (horizontal scroll, edge-to-edge)
+                if let plan = viewModel.plan {
+                    WeekOverviewView(
+                        plan: plan,
+                        todayDayIndex: viewModel.todayDayIndex,
+                        horizontalInset: DS.Spacing.md
+                    )
+                }
+
             }
-            .padding(.leading, DS.Spacing.md)
-            .padding(.bottom, DS.Spacing.md)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.bottom, 80)
+        }
+        .background(DS.Colors.bgPrimary.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(DS.Colors.bgPrimary, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("Revibe")
+                    .font(.system(size: 18, weight: .medium, design: .serif))
+                    .foregroundColor(DS.Colors.textPrimary)
+            }
+        }
+        .task {
+            await viewModel.loadUserData()
         }
     }
 }

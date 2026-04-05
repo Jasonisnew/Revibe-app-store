@@ -25,14 +25,31 @@ private enum LM {
     static let rightHip      = 24
 }
 
+// MARK: - Form Quality
+
+enum FormQuality: String {
+    case good = "Good"
+    case fair = "Fair"
+    case poor = "Poor"
+
+    var color: String {
+        switch self {
+        case .good: return "green"
+        case .fair: return "yellow"
+        case .poor: return "red"
+        }
+    }
+}
+
 // MARK: - Result
 
-/// Everything WorkoutView needs from a single analyzed frame.
 struct LateralRaiseFrameResult {
     let feedbackText: String
     let repCount: Int
-    let progress: Double          // 0…1  (reps / targetReps)
+    let progress: Double
     let landmarks: [NormalizedLandmark]
+    let errorLabels: [String]
+    let formQuality: FormQuality
 }
 
 // MARK: - Analyzer
@@ -143,8 +160,8 @@ final class LateralRaiseAnalyzer {
             }
         }
 
-        // ── 4. Feedback ────────────────────────────────────────────────────
-        let feedback = buildFeedback(
+        // ── 4. Feedback + errors ─────────────────────────────────────────
+        let (feedback, errors, quality) = buildDetailedFeedback(
             leftAngle:  leftAngle,
             rightAngle: rightAngle,
             lElbow:     lElbow,
@@ -159,7 +176,9 @@ final class LateralRaiseAnalyzer {
             feedbackText: feedback,
             repCount:     repCount,
             progress:     progress,
-            landmarks:    landmarks
+            landmarks:    landmarks,
+            errorLabels:  errors,
+            formQuality:  quality
         )
     }
 
@@ -239,30 +258,49 @@ final class LateralRaiseAnalyzer {
 
     // MARK: - Feedback builder
 
-    private func buildFeedback(leftAngle:  Double,
-                               rightAngle: Double,
-                               lElbow:     Double,
-                               rElbow:     Double,
-                               torso:      Double,
-                               phase:      Phase) -> String {
+    private func buildDetailedFeedback(leftAngle:  Double,
+                                       rightAngle: Double,
+                                       lElbow:     Double,
+                                       rElbow:     Double,
+                                       torso:      Double,
+                                       phase:      Phase) -> (String, [String], FormQuality) {
 
         let avgAngle = (leftAngle + rightAngle) / 2
+        var errors: [String] = []
 
+        if lElbow < elbowBentThreshold || rElbow < elbowBentThreshold {
+            errors.append("Elbows too bent")
+        }
+        if torso > torsoLeanThreshold {
+            errors.append("Leaning detected")
+        }
+
+        let leftOk  = leftAngle  >= correctMin && leftAngle  <= correctMax
+        let rightOk = rightAngle >= correctMin && rightAngle <= correctMax
+        if !leftOk && rightOk   { errors.append("Left arm uneven") }
+        if leftOk  && !rightOk  { errors.append("Right arm uneven") }
+
+        let primaryCue: String
         switch phase {
         case .down:
-            return "Raise Higher"
-
+            primaryCue = "Raise Higher"
         case .goingUp:
-            return avgAngle < correctMin ? "Raise Higher" : "Correct Form"
-
+            primaryCue = avgAngle < correctMin ? "Raise Higher" : "Good Form"
         case .up:
-            let leftOk  = leftAngle  >= correctMin && leftAngle  <= correctMax
-            let rightOk = rightAngle >= correctMin && rightAngle <= correctMax
-            if leftOk && rightOk { return "Correct Form" }
-            return avgAngle < correctMin ? "Raise Higher" : "Raise Lower"
-
+            primaryCue = (leftOk && rightOk) ? "Good Form" : (avgAngle < correctMin ? "Raise Higher" : "Lower Slightly")
         case .goingDown:
-            return "Raise Lower"
+            primaryCue = "Controlled Descent"
         }
+
+        let quality: FormQuality
+        if errors.isEmpty && (primaryCue == "Good Form" || primaryCue == "Controlled Descent") {
+            quality = .good
+        } else if errors.count <= 1 {
+            quality = .fair
+        } else {
+            quality = .poor
+        }
+
+        return (primaryCue, errors, quality)
     }
 }

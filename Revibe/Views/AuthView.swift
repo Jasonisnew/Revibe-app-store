@@ -13,6 +13,7 @@ struct AuthView: View {
     @State private var isSignUp = false
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showConfirmationAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,6 +119,11 @@ struct AuthView: View {
             Spacer()
         }
         .background(DS.Colors.bgPrimary.ignoresSafeArea())
+        .alert("Check Your Email", isPresented: $showConfirmationAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("A confirmation email has been sent to your email.")
+        }
     }
 
     private func authenticate() async {
@@ -139,8 +145,9 @@ struct AuthView: View {
                     email: email,
                     password: password,
                     data: ["display_name": .string(displayName)],
-                    redirectTo: URL(string: "revibe://auth/callback")
+                    redirectTo: authEmailRedirectURL
                 )
+                showConfirmationAlert = true
             } else {
                 try await supabase.auth.signIn(
                     email: email,

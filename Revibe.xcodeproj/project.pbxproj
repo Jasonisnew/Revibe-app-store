@@ -59,9 +59,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 229A86CC2F5143A30032F096 /* Build configuration list for PBXNativeTarget "Revibe" */;
 			buildPhases = (
+				22B1F0A02FA3210000B3764D /* Fix Framework Plists */,
 				229A86BD2F5143A20032F096 /* Sources */,
 				229A86BE2F5143A20032F096 /* Frameworks */,
 				229A86BF2F5143A20032F096 /* Resources */,
+				22B1F0B02FA3220000B3764D /* Remove Static Frameworks */,
 			);
 			buildRules = (
 			);
@@ -127,6 +129,47 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		22B1F0A02FA3210000B3764D /* Fix Framework Plists */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Fix Framework Plists";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Find the DerivedData root containing SourcePackages\nSEARCH_ROOT=\"${BUILD_DIR}\"\nwhile [ ! -d \"${SEARCH_ROOT}/SourcePackages\" ] && [ \"${SEARCH_ROOT}\" != \"/\" ]; do\n    SEARCH_ROOT=$(dirname \"${SEARCH_ROOT}\")\ndone\nSPM_CHECKOUTS=\"${SEARCH_ROOT}/SourcePackages/checkouts\"\n\nfix_plist() {\n    local plist=\"$1\"\n    chmod +w \"$plist\" 2>/dev/null\n    /usr/libexec/PlistBuddy -c \"Set :MinimumOSVersion 16.0\" \"$plist\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Add :MinimumOSVersion string 16.0\" \"$plist\" 2>/dev/null\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString 1.0\" \"$plist\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Add :CFBundleShortVersionString string 1.0\" \"$plist\" 2>/dev/null\n    /usr/libexec/PlistBuddy -c \"Set :CFBundleVersion 1\" \"$plist\" 2>/dev/null || /usr/libexec/PlistBuddy -c \"Add :CFBundleVersion string 1\" \"$plist\" 2>/dev/null\n    local currentType\n    currentType=$(/usr/libexec/PlistBuddy -c \"Print :CFBundlePackageType\" \"$plist\" 2>/dev/null)\n    if [ \"$currentType\" = \"XFWK\" ]; then\n        /usr/libexec/PlistBuddy -c \"Set :CFBundlePackageType FMWK\" \"$plist\"\n    fi\n}\n\n# Fix source xcframework plists before they get embedded\nif [ -d \"$SPM_CHECKOUTS\" ]; then\n    find \"$SPM_CHECKOUTS\" -path \"*.framework/Info.plist\" | while read plist; do\n        fix_plist \"$plist\"\n    done\nfi\n";
+		};
+		22B1F0B02FA3220000B3764D /* Remove Static Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Remove Static Frameworks";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Remove static frameworks that SPM incorrectly embeds.\n# MediaPipeTasksVision is a static library (ar archive) whose code is\n# linked into the app binary. The .framework bundle must not appear in\n# the Frameworks folder or App Store validation will reject the build.\nFW_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nif [ -d \"${FW_DIR}/MediaPipeTasksVision.framework\" ]; then\n    rm -rf \"${FW_DIR}/MediaPipeTasksVision.framework\"\n    echo \"Removed static MediaPipeTasksVision.framework from app bundle\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		229A86BD2F5143A20032F096 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -176,7 +219,7 @@
 				DEVELOPMENT_TEAM = K548GL4734;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -238,7 +281,7 @@
 				DEVELOPMENT_TEAM = K548GL4734;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -261,7 +304,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = K548GL4734;
+				DEVELOPMENT_TEAM = 7923CC7WFX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -284,7 +327,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jason.Revibe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.revibe.jason;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
@@ -307,7 +350,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = K548GL4734;
+				DEVELOPMENT_TEAM = 7923CC7WFX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -330,7 +373,7 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = Jason.Revibe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.revibe.jason;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;

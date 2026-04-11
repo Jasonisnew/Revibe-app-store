@@ -9,7 +9,7 @@ const page = `<!DOCTYPE html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>Revibe — Email confirmed</title>
+  <title>Revibe &mdash; Email confirmed</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -59,7 +59,7 @@ const page = `<!DOCTYPE html>
   <div class="card">
     <h1>Revibe</h1>
     <p class="subtitle">Your email is confirmed.</p>
-    <p class="hint" id="status">Opening the app… If nothing happens, use the button below.</p>
+    <p class="hint" id="status">Opening the app&hellip; If nothing happens, use the button below.</p>
     <a class="btn" id="openApp" href="revibe://auth/callback">Open Revibe</a>
   </div>
   <script>
@@ -89,6 +89,12 @@ const page = `<!DOCTYPE html>
 </body>
 </html>`;
 
+const htmlHeaders = new Headers({
+  "Content-Type": "text/html; charset=utf-8",
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+});
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
@@ -100,10 +106,5 @@ Deno.serve(async (req) => {
     });
   }
 
-  return new Response(page, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
+  return new Response(page, { status: 200, headers: htmlHeaders });
 });

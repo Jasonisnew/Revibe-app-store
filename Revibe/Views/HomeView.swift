@@ -39,6 +39,14 @@ struct HomeView: View {
                 }
                 .padding(.top, 4)
 
+                // Pose test (above plan content so it stays easy to find)
+                Button {
+                    path.append(.poseTestList)
+                } label: {
+                    PoseTestBlockView()
+                }
+                .buttonStyle(.plain)
+
                 // 2. Today's workout hero card
                 if let todayDay = viewModel.todayDay, let plan = viewModel.plan {
                     TodayWorkoutCard(

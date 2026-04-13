@@ -8,6 +8,8 @@ import SwiftUI
 enum Route: Hashable {
     case workout(movementName: String)
     case summary(SummaryPayload)
+    case poseTestList
+    case poseTestExercise(PoseTestExercise)
 }
 
 struct SummaryPayload: Hashable {
@@ -57,6 +59,10 @@ struct ContentView: View {
                             payload: payload,
                             path: $path
                         )
+                    case .poseTestList:
+                        PoseTestListView(path: $path)
+                    case .poseTestExercise(let exercise):
+                        PoseExerciseTestView(exercise: exercise)
                     }
                 }
             }

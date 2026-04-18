@@ -13,44 +13,63 @@ struct WorkoutView: View {
     @Binding var path: [Route]
 
     @StateObject private var viewModel = WorkoutViewModel()
+    @StateObject private var audioCoach = AudioCoachService()
     @State private var cameraManager = CameraManager()
     @State private var poseService = PoseLandmarkerService()
     @State private var lateralRaiseAnalyzer = LateralRaiseAnalyzer()
     @State private var posePipelineCancellable: AnyCancellable?
     @State private var noPoseTimer: Timer? = nil
     @State private var lastDetectionTime: Date = .distantPast
+    @State private var lastReportedRepCount: Int = 0
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            VStack(spacing: 0) {
 
-            // MARK: Set info bar
-            setInfoBar
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.top, DS.Spacing.xs)
+                // MARK: Set info bar
+                setInfoBar
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.top, DS.Spacing.xs)
 
-            // MARK: Main coaching cue
-            coachingCue
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.top, DS.Spacing.sm)
+                // MARK: Main coaching cue
+                coachingCue
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.top, DS.Spacing.sm)
 
-            // MARK: Progress + quality row
-            progressRow
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.top, 10)
-                .padding(.bottom, 10)
+                // MARK: Progress + quality row
+                progressRow
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.top, 10)
+                    .padding(.bottom, 10)
 
-            // MARK: Camera with overlays
-            cameraSection
-                .padding(.horizontal, DS.Spacing.md)
+                // MARK: Camera with overlays
+                cameraSection
+                    .padding(.horizontal, DS.Spacing.md)
 
-            Spacer(minLength: DS.Spacing.sm)
+                // MARK: Set-end summary (shown during rest)
+                if viewModel.isResting && !viewModel.setEndSummary.isEmpty {
+                    setEndSummaryBanner
+                        .padding(.horizontal, DS.Spacing.md)
+                        .padding(.top, DS.Spacing.xs)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
 
-            // MARK: Bottom controls
-            bottomControls
-                .padding(.horizontal, DS.Spacing.md)
-                .padding(.bottom, DS.Spacing.sm)
+                Spacer(minLength: DS.Spacing.sm)
+
+                // MARK: Bottom controls
+                bottomControls
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.bottom, DS.Spacing.sm)
+            }
+            .background(DS.Colors.bgPrimary.ignoresSafeArea())
+
+            // MARK: Danger alert overlay
+            if viewModel.showDangerAlert {
+                dangerAlertOverlay
+            }
         }
-        .background(DS.Colors.bgPrimary.ignoresSafeArea())
+        .animation(.easeInOut(duration: 0.25), value: viewModel.showDangerAlert)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isResting && !viewModel.setEndSummary.isEmpty)
         .navigationTitle(movementName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(DS.Colors.bgPrimary, for: .navigationBar)
@@ -69,6 +88,7 @@ struct WorkoutView: View {
             cameraManager.startSession()
             startPosePipeline()
             startNoPoseWatchdog()
+            audioCoach.speakOnSessionStart()
         }
         .onDisappear {
             posePipelineCancellable = nil
@@ -77,6 +97,7 @@ struct WorkoutView: View {
             viewModel.stopSession()
             cameraManager.stopSession()
             lateralRaiseAnalyzer.reset()
+            audioCoach.stop()
         }
     }
 
@@ -106,14 +127,18 @@ struct WorkoutView: View {
 
             Spacer()
 
+            // Audio mode chip
             HStack(spacing: 4) {
-                Image(systemName: "clock")
+                Image(systemName: audioCoach.isVoiceEnabled ? audioCoach.motivationMode.iconName : "speaker.slash")
                     .font(.caption2)
-                    .foregroundColor(DS.Colors.textMuted)
-                Text("Rest \(viewModel.restDuration)s")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(DS.Colors.textSecondary)
+                    .foregroundColor(audioCoach.isVoiceEnabled ? DS.Colors.accent : DS.Colors.textMuted)
+                Text(audioCoach.isVoiceEnabled ? audioCoach.motivationMode.rawValue : "Silent")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(audioCoach.isVoiceEnabled ? DS.Colors.accent : DS.Colors.textMuted)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(DS.Colors.bgTertiary))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -226,7 +251,7 @@ struct WorkoutView: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card))
 
-                // Error labels overlay at bottom of camera
+                // Error labels overlay — only risk-engine-approved cues reach here
                 if !viewModel.errorLabels.isEmpty && !viewModel.isResting {
                     VStack(spacing: 6) {
                         ForEach(viewModel.errorLabels, id: \.self) { label in
@@ -253,7 +278,7 @@ struct WorkoutView: View {
 
     private func errorTag(_ text: String) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.system(size: 10))
             Text(text)
                 .font(.system(size: 12, weight: .semibold))
@@ -262,7 +287,7 @@ struct WorkoutView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            Capsule().fill(DS.Colors.error.opacity(0.85))
+            Capsule().fill(Color(red: 255/255, green: 165/255, blue: 0/255).opacity(0.88))
         )
     }
 
@@ -278,6 +303,102 @@ struct WorkoutView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Capsule().fill(Color.black.opacity(0.5)))
+    }
+
+    // MARK: - Set-End Summary Banner
+
+    private var setEndSummaryBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "list.clipboard")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(DS.Colors.blue)
+                Text("Set \(viewModel.currentSet - 1) Notes")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.textPrimary)
+            }
+            ForEach(viewModel.setEndSummary, id: \.self) { note in
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(red: 255/255, green: 214/255, blue: 10/255))
+                        .frame(width: 5, height: 5)
+                    Text(note)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(DS.Colors.textSecondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .fill(DS.Colors.bgSecondary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.card)
+                        .stroke(DS.Colors.blue.opacity(0.3), lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Danger Alert Overlay
+
+    private var dangerAlertOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.72)
+                .ignoresSafeArea()
+
+            VStack(spacing: DS.Spacing.sm) {
+                ZStack {
+                    Circle()
+                        .fill(DS.Colors.error.opacity(0.18))
+                        .frame(width: 64, height: 64)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(DS.Colors.error)
+                }
+
+                Text("Stop")
+                    .font(.system(size: 26, weight: .bold, design: .serif))
+                    .foregroundColor(DS.Colors.error)
+
+                Text(viewModel.dangerMessage)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DS.Spacing.md)
+
+                Text("Lower the weight, reset your form, and continue when ready.")
+                    .font(.subheadline)
+                    .foregroundColor(DS.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DS.Spacing.md)
+
+                Button {
+                    viewModel.dismissDangerAlert()
+                } label: {
+                    Text("I'm reset — continue")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(DS.Colors.textOnAccent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(DS.Colors.accent)
+                        .cornerRadius(DS.Radius.button)
+                }
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.top, DS.Spacing.xs)
+            }
+            .padding(DS.Spacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: DS.Radius.card)
+                    .fill(DS.Colors.bgSecondary)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DS.Radius.card)
+                    .stroke(DS.Colors.error.opacity(0.5), lineWidth: 1)
+            )
+            .padding(.horizontal, DS.Spacing.md)
+        }
     }
 
     // MARK: - Bottom Controls
@@ -324,7 +445,8 @@ struct WorkoutView: View {
                     kcal: viewModel.kcal,
                     repsCompleted: viewModel.repCount,
                     totalReps: viewModel.repsPerSet * viewModel.totalSets,
-                    formScore: viewModel.formScorePercent
+                    formScore: viewModel.formScorePercent,
+                    formInsights: viewModel.allFormInsights
                 )))
             } label: {
                 Text("Complete")
@@ -349,14 +471,36 @@ struct WorkoutView: View {
             }
             .sink { [self] result in
                 lastDetectionTime = Date()
+
+                let prevRepCount = viewModel.repCount
+
                 viewModel.updateFromPose(
                     feedback: result.feedbackText,
                     repCount: result.repCount,
                     progress: result.progress,
                     landmarks: result.landmarks,
-                    errorLabels: result.errorLabels,
+                    formErrors: result.formErrors,
                     formQuality: result.formQuality
                 )
+
+                // Fire danger warning voice cue (bypasses throttle)
+                if viewModel.showDangerAlert && !viewModel.dangerMessage.isEmpty {
+                    audioCoach.speakDangerWarning(viewModel.dangerMessage)
+                }
+
+                // Fire encouragement on rep completion
+                let newRepCount = viewModel.repCount
+                if newRepCount > prevRepCount {
+                    audioCoach.speakOnRepCompleted(
+                        repNumber: newRepCount,
+                        totalReps: viewModel.repsPerSet
+                    )
+                }
+
+                // Voice cue when a set rest begins
+                if viewModel.isResting && !viewModel.setEndSummary.isEmpty && prevRepCount < viewModel.repsPerSet {
+                    audioCoach.speakOnSetCompleted()
+                }
             }
     }
 

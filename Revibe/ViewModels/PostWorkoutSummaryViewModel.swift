@@ -17,6 +17,7 @@ class PostWorkoutSummaryViewModel: ObservableObject {
     let totalReps: Int
     let movementName: String
     let streakDots: [Bool]
+    let formInsights: [String]
 
     @Published var coachingTip: String? = nil
     @Published var isLoadingTip: Bool = true
@@ -51,6 +52,7 @@ class PostWorkoutSummaryViewModel: ObservableObject {
         self.repsCompleted = payload.repsCompleted
         self.totalReps = payload.totalReps
         self.streakDots = (0..<7).map { $0 < payload.streak + 1 }
+        self.formInsights = payload.formInsights
 
         self.previousSession = SessionRecord.loadPrevious()
 

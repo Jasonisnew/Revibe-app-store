@@ -20,6 +20,7 @@ struct SummaryPayload: Hashable {
     let repsCompleted: Int
     let totalReps: Int
     let formScore: Int
+    var formInsights: [String] = []
 }
 
 enum Tab {

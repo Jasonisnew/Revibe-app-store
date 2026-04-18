@@ -1,7 +1,8 @@
 /**
  * Landing page after email confirmation. Supabase redirects here with ?code= (PKCE)
- * or #access_token=… in the fragment. We show a clear message, then forward the same
- * query + hash to revibe://auth/callback so supabase.auth.handle(url) can complete the session.
+ * or #access_token=… in the fragment. We only claim success when those are present;
+ * we surface auth errors from the URL and guide users otherwise.
+ * Forwards query + hash to revibe://auth/callback so supabase.auth.handle(url) can complete the session.
  */
 const page = `<!DOCTYPE html>
 <html lang="en">
@@ -9,7 +10,7 @@ const page = `<!DOCTYPE html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>Revibe &mdash; Email confirmed</title>
+  <title>Revibe</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -58,32 +59,67 @@ const page = `<!DOCTYPE html>
 <body>
   <div class="card">
     <h1>Revibe</h1>
-    <p class="subtitle">Your email is confirmed.</p>
-    <p class="hint" id="status">Opening the app&hellip; If nothing happens, use the button below.</p>
-    <a class="btn" id="openApp" href="revibe://auth/callback">Open Revibe</a>
+    <p class="subtitle" id="subtitle">Checking your confirmation link…</p>
+    <p class="hint" id="status">Please wait.</p>
+    <a class="btn" id="openApp" href="revibe://auth/callback" style="display: none">Open Revibe</a>
   </div>
   <script>
     (function () {
+      function fragmentParams() {
+        var h = window.location.hash || "";
+        if (h.charAt(0) === "#") h = h.slice(1);
+        return new URLSearchParams(h);
+      }
       function appCallbackUrl() {
         var q = window.location.search || "";
         var h = window.location.hash || "";
         return "revibe://auth/callback" + q + h;
       }
-      var link = document.getElementById("openApp");
-      link.setAttribute("href", appCallbackUrl());
-      function openApp() {
-        window.location.href = appCallbackUrl();
+      var query = new URLSearchParams(window.location.search);
+      var frag = fragmentParams();
+      function param(name) {
+        var v = query.get(name);
+        if (v != null) return v;
+        return frag.get(name);
       }
-      if (window.location.search || window.location.hash) {
+      var subtitleEl = document.getElementById("subtitle");
+      var statusEl = document.getElementById("status");
+      var link = document.getElementById("openApp");
+      var err = param("error");
+      var errDesc = param("error_description");
+      var code = query.get("code");
+      var accessToken = frag.get("access_token");
+      if (err) {
+        document.title = "Revibe — Confirmation issue";
+        subtitleEl.textContent = "Confirmation did not complete.";
+        var detail = errDesc
+          ? errDesc.replace(/\\+/g, " ")
+          : "This link may be expired or invalid.";
+        statusEl.textContent = detail;
+        link.style.display = "none";
+        return;
+      }
+      if (code || accessToken) {
+        document.title = "Revibe — Email confirmed";
+        subtitleEl.textContent = "Your email is confirmed.";
+        statusEl.textContent =
+          "Opening the app… If nothing happens, use the button below.";
+        link.style.display = "inline-block";
+        link.setAttribute("href", appCallbackUrl());
         window.addEventListener("load", function () {
           requestAnimationFrame(function () {
-            setTimeout(openApp, 120);
+            setTimeout(function () {
+              window.location.href = appCallbackUrl();
+            }, 120);
           });
         });
-      } else {
-        document.getElementById("status").textContent =
-          "You can close this tab and return to the Revibe app.";
+        return;
       }
+      document.title = "Revibe — Confirmation link";
+      subtitleEl.textContent = "We could not verify from this page.";
+      statusEl.textContent =
+        "Open the Revibe app and sign in with your email and password. If you still need to confirm, use Resend confirmation email on the sign-up screen.";
+      link.style.display = "none";
     })();
   </script>
 </body>
@@ -91,6 +127,7 @@ const page = `<!DOCTYPE html>
 
 const htmlHeaders = new Headers({
   "Content-Type": "text/html; charset=utf-8",
+  "Content-Disposition": "inline",
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
 });

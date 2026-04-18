@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     @ObservedObject var viewModel: ProfileViewModel
@@ -19,6 +20,16 @@ struct SettingsView: View {
 
     @State private var saveError: String?
     @State private var isSaving = false
+
+    // MARK: - Audio & Feedback settings (UserDefaults backed via AppStorage)
+    @AppStorage("audioCoach.voiceEnabled")    private var voiceEnabled: Bool = true
+    @AppStorage("audioCoach.sfxEnabled")      private var sfxEnabled: Bool = false
+    @AppStorage("audioCoach.backgroundMusic") private var backgroundMusic: Bool = false
+    @AppStorage("audioCoach.motivationMode")  private var motivationModeRaw: String = MotivationMode.coach.rawValue
+
+    private var motivationMode: MotivationMode {
+        MotivationMode(rawValue: motivationModeRaw) ?? .coach
+    }
 
     var body: some View {
         NavigationStack {
@@ -86,6 +97,73 @@ struct SettingsView: View {
                                     RoundedRectangle(cornerRadius: DS.Radius.input)
                                         .stroke(DS.Colors.border, lineWidth: 1)
                                 )
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
+                    // MARK: Audio & Feedback
+                    sectionTitle("Audio & Feedback")
+
+                    audioToggleRow(
+                        icon: "waveform",
+                        title: "Voice Encouragement",
+                        subtitle: "Hear coaching phrases during your workout",
+                        isOn: $voiceEnabled
+                    )
+
+                    audioToggleRow(
+                        icon: "music.quarternote.3",
+                        title: "Background Music Support",
+                        subtitle: "Allow music to play while working out",
+                        isOn: $backgroundMusic
+                    )
+
+                    audioToggleRow(
+                        icon: "bell.badge",
+                        title: "Sound Effects",
+                        subtitle: "Rep ticks and set completion chimes",
+                        isOn: $sfxEnabled
+                    )
+
+                    if voiceEnabled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Motivation Style")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(DS.Colors.textSecondary)
+
+                            HStack(spacing: 8) {
+                                ForEach(MotivationMode.allCases, id: \.self) { mode in
+                                    Button {
+                                        motivationModeRaw = mode.rawValue
+                                    } label: {
+                                        VStack(spacing: 5) {
+                                            Image(systemName: mode.iconName)
+                                                .font(.system(size: 18))
+                                                .foregroundColor(motivationModeRaw == mode.rawValue ? DS.Colors.textOnAccent : DS.Colors.textMuted)
+                                            Text(mode.rawValue)
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(motivationModeRaw == mode.rawValue ? DS.Colors.textOnAccent : DS.Colors.textMuted)
+                                            Text(mode.description)
+                                                .font(.system(size: 10))
+                                                .foregroundColor(motivationModeRaw == mode.rawValue ? DS.Colors.textOnAccent.opacity(0.7) : DS.Colors.textMuted.opacity(0.7))
+                                                .multilineTextAlignment(.center)
+                                                .lineLimit(2)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                        }
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 8)
+                                        .frame(maxWidth: .infinity)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: DS.Radius.button)
+                                                .fill(motivationModeRaw == mode.rawValue ? DS.Colors.accent : DS.Colors.bgSecondary)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: DS.Radius.button)
+                                                .stroke(motivationModeRaw == mode.rawValue ? Color.clear : DS.Colors.border, lineWidth: 1)
+                                        )
+                                    }
+                                }
+                            }
                         }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                     }
@@ -185,6 +263,46 @@ struct SettingsView: View {
                 )
             }
         }
+    }
+
+    private func audioToggleRow(icon: String, title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(DS.Colors.bgTertiary)
+                    .frame(width: 36, height: 36)
+                Image(systemName: icon)
+                    .font(.system(size: 15))
+                    .foregroundColor(isOn.wrappedValue ? DS.Colors.accent : DS.Colors.textMuted)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(DS.Colors.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .fill(DS.Colors.bgSecondary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.card)
+                        .stroke(DS.Colors.border, lineWidth: 1)
+                )
+        )
     }
 
     private func syncFromViewModel() {

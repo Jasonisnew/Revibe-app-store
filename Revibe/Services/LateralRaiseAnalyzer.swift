@@ -48,8 +48,11 @@ struct LateralRaiseFrameResult {
     let repCount: Int
     let progress: Double
     let landmarks: [NormalizedLandmark]
-    let errorLabels: [String]
+    let formErrors: [FormError]
     let formQuality: FormQuality
+
+    /// Flat label strings for legacy display paths
+    var errorLabels: [String] { formErrors.map { $0.label } }
 }
 
 // MARK: - Analyzer
@@ -69,11 +72,15 @@ final class LateralRaiseAnalyzer {
     /// Arms are considered "at the top" (rep triggered) when signed angle is ≥ this.
     var peakThreshold: Double = -25
 
-    /// Elbow angle below this → arm is too bent (interior angle at elbow joint).
+    /// Elbow angle below this → arm is moderately too bent — minor error
     var elbowBentThreshold: Double = 140
+    /// Elbow angle below this → severe bend with joint strain risk — dangerous error
+    var elbowDangerThreshold: Double = 100
 
-    /// Torso lean above this → user is swinging / leaning (degrees from vertical).
+    /// Torso lean above this → user is swinging / leaning — minor error
     var torsoLeanThreshold: Double = 18
+    /// Torso lean above this → significant injury risk — dangerous error
+    var torsoDangerThreshold: Double = 30
 
     /// Frames of history to average for smoothing (reduces jitter).
     let smoothingWindow: Int = 6
@@ -177,7 +184,7 @@ final class LateralRaiseAnalyzer {
             repCount:     repCount,
             progress:     progress,
             landmarks:    landmarks,
-            errorLabels:  errors,
+            formErrors:   errors,
             formQuality:  quality
         )
     }
@@ -263,24 +270,40 @@ final class LateralRaiseAnalyzer {
                                        lElbow:     Double,
                                        rElbow:     Double,
                                        torso:      Double,
-                                       phase:      Phase) -> (String, [String], FormQuality) {
+                                       phase:      Phase) -> (String, [FormError], FormQuality) {
 
         let avgAngle = (leftAngle + rightAngle) / 2
-        var errors: [String] = []
+        var errors: [FormError] = []
 
-        if lElbow < elbowBentThreshold || rElbow < elbowBentThreshold {
-            errors.append("Elbows too bent")
-        }
-        if torso > torsoLeanThreshold {
-            errors.append("Leaning detected")
+        // Torso lean — dangerous threshold first
+        if torso > torsoDangerThreshold {
+            errors.append(FormError(key: "torsoDanger", label: "Stop — reset your posture", risk: .dangerous))
+        } else if torso > torsoLeanThreshold {
+            errors.append(FormError(key: "torsoLean", label: "Leaning — keep upright", risk: .minor))
         }
 
-        let leftOk  = leftAngle  >= correctMin && leftAngle  <= correctMax
-        let rightOk = rightAngle >= correctMin && rightAngle <= correctMax
-        if !leftOk && rightOk   { errors.append("Left arm uneven") }
-        if leftOk  && !rightOk  { errors.append("Right arm uneven") }
+        // Elbow bend — dangerous threshold first
+        let minElbow = min(lElbow, rElbow)
+        if minElbow < elbowDangerThreshold {
+            errors.append(FormError(key: "elbowDanger", label: "Elbows too bent — strain risk", risk: .dangerous))
+        } else if minElbow < elbowBentThreshold {
+            errors.append(FormError(key: "elbowBent", label: "Soften the elbows", risk: .minor))
+        }
+
+        // Arm symmetry (only flag during the active raising/holding phase)
+        if phase == .goingUp || phase == .up {
+            let leftOk  = leftAngle  >= correctMin && leftAngle  <= correctMax
+            let rightOk = rightAngle >= correctMin && rightAngle <= correctMax
+            if !leftOk && rightOk {
+                errors.append(FormError(key: "leftUneven", label: "Left arm uneven", risk: .minor))
+            } else if leftOk && !rightOk {
+                errors.append(FormError(key: "rightUneven", label: "Right arm uneven", risk: .minor))
+            }
+        }
 
         let primaryCue: String
+        let leftOk  = leftAngle  >= correctMin && leftAngle  <= correctMax
+        let rightOk = rightAngle >= correctMin && rightAngle <= correctMax
         switch phase {
         case .down:
             primaryCue = "Raise Higher"
@@ -292,8 +315,11 @@ final class LateralRaiseAnalyzer {
             primaryCue = "Controlled Descent"
         }
 
+        let hasDanger = errors.contains { $0.risk == .dangerous }
         let quality: FormQuality
-        if errors.isEmpty && (primaryCue == "Good Form" || primaryCue == "Controlled Descent") {
+        if hasDanger {
+            quality = .poor
+        } else if errors.isEmpty && (primaryCue == "Good Form" || primaryCue == "Controlled Descent") {
             quality = .good
         } else if errors.count <= 1 {
             quality = .fair

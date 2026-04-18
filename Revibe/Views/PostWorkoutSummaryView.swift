@@ -38,6 +38,13 @@ struct PostWorkoutSummaryView: View {
                     .padding(.top, DS.Spacing.sm)
                     .padding(.horizontal, DS.Spacing.md)
 
+                // MARK: - Form Insights (from risk engine)
+                if !viewModel.formInsights.isEmpty {
+                    formInsightsCard
+                        .padding(.top, DS.Spacing.sm)
+                        .padding(.horizontal, DS.Spacing.md)
+                }
+
                 // MARK: - Streak
                 streakCard
                     .padding(.top, DS.Spacing.sm)
@@ -300,6 +307,53 @@ struct PostWorkoutSummaryView: View {
         .overlay(
             RoundedRectangle(cornerRadius: DS.Radius.card)
                 .stroke(DS.Colors.border, lineWidth: 1)
+        )
+    }
+
+    // MARK: - Form Insights Card
+
+    private var formInsightsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "figure.mind.and.body")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(red: 255/255, green: 214/255, blue: 10/255))
+                Text("Form Notes")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(DS.Colors.textPrimary)
+                Spacer()
+                Text("From your session")
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(viewModel.formInsights, id: \.self) { insight in
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(red: 255/255, green: 214/255, blue: 10/255).opacity(0.7))
+                            .frame(width: 3, height: 16)
+                        Text(insight)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(DS.Colors.textSecondary)
+                    }
+                }
+            }
+
+            Text("Focus on these next session for a better form score.")
+                .font(.caption)
+                .foregroundColor(DS.Colors.textMuted)
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(DS.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .fill(DS.Colors.bgSecondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .stroke(Color(red: 255/255, green: 214/255, blue: 10/255).opacity(0.25), lineWidth: 1)
         )
     }
 

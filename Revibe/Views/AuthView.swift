@@ -14,6 +14,8 @@ struct AuthView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showConfirmationAlert = false
+    /// Set after a successful sign-up so we can resend the confirmation email.
+    @State private var emailPendingConfirmation: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -107,6 +109,18 @@ struct AuthView: View {
 
             Spacer().frame(height: 12)
 
+            if emailPendingConfirmation != nil {
+                Button {
+                    Task { await resendConfirmationEmail() }
+                } label: {
+                    Text("Resend confirmation email")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(DS.Colors.accent)
+                }
+                .disabled(isLoading)
+                .padding(.top, 4)
+            }
+
             Button {
                 withAnimation { isSignUp.toggle() }
                 errorMessage = nil
@@ -122,7 +136,9 @@ struct AuthView: View {
         .alert("Check Your Email", isPresented: $showConfirmationAlert) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("A confirmation email has been sent to your email.")
+            Text(
+                "A confirmation email has been sent. After you tap the link, you should see a confirmation page or the app may open. You can also return here and sign in once your email is confirmed. If the link expires, use Resend confirmation email."
+            )
         }
     }
 
@@ -147,13 +163,38 @@ struct AuthView: View {
                     data: ["display_name": .string(displayName)],
                     redirectTo: authEmailRedirectURL
                 )
+                emailPendingConfirmation = email
                 showConfirmationAlert = true
             } else {
                 try await supabase.auth.signIn(
                     email: email,
                     password: password
                 )
+                emailPendingConfirmation = nil
             }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private func resendConfirmationEmail() async {
+        let target = emailPendingConfirmation ?? email
+        guard !target.isEmpty else {
+            errorMessage = "Enter the email you used to sign up."
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            try await supabase.auth.resend(
+                email: target,
+                type: .signup,
+                emailRedirectTo: authEmailRedirectURL
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -14,6 +14,7 @@ class WorkoutViewModel: ObservableObject {
     @Published var isComplete: Bool = false
     @Published var lastLandmarks: [NormalizedLandmark]? = nil
 
+    // Risk-filtered error labels — only shown when risk engine escalates to .repeated
     @Published var errorLabels: [String] = []
     @Published var formQuality: FormQuality = .good
     @Published var currentSet: Int = 1
@@ -25,6 +26,13 @@ class WorkoutViewModel: ObservableObject {
     @Published var isPaused: Bool = false
     @Published var isTracking: Bool = false
 
+    // MARK: - Danger alert (immediate interrupt for high-risk errors)
+    @Published var showDangerAlert: Bool = false
+    @Published var dangerMessage: String = ""
+
+    // MARK: - Set-end summary (minor errors logged over the set)
+    @Published var setEndSummary: [String] = []
+
     let instructionCue = "Keep your back straight and core engaged"
     var elapsedTime: String { formatElapsed(elapsedSeconds) }
     var kcal: Int { max(1, Int(Double(elapsedSeconds) * 0.08)) }
@@ -34,6 +42,12 @@ class WorkoutViewModel: ObservableObject {
         return Int(round(formScoreSum / Double(formSamples) * 100))
     }
 
+    /// All minor-error insights accumulated across all sets — passed to summary screen
+    private(set) var allFormInsights: [String] = []
+
+    // MARK: - Private
+
+    private let riskEngine = RiskFeedbackEngine()
     private var formScoreSum: Double = 0
     private var formSamples: Int = 0
     private var elapsedSeconds: Int = 0
@@ -52,14 +66,37 @@ class WorkoutViewModel: ObservableObject {
         "Almost there!"
     ]
 
+    // MARK: - Pose update (called every camera frame)
+
     func updateFromPose(feedback: String, repCount: Int, progress: Double,
                         landmarks: [NormalizedLandmark]? = nil,
-                        errorLabels: [String] = [], formQuality: FormQuality = .good) {
-        feedbackText = feedback
+                        formErrors: [FormError] = [], formQuality: FormQuality = .good) {
+
+        // Run the risk engine
+        let decision = riskEngine.evaluate(errors: formErrors, repCount: repCount)
+
+        // Dangerous alert — takes over UI immediately
+        if decision.triggerDangerAlert, let msg = decision.dangerMessage {
+            if !showDangerAlert {
+                showDangerAlert = true
+                dangerMessage = msg
+                // Pause rep counting while alert is active — don't update further
+            }
+        }
+
+        // Only update normal UI when no danger alert is blocking
+        if !showDangerAlert {
+            feedbackText = feedback
+            if decision.level == .repeated, let msg = decision.displayMessage {
+                errorLabels = [msg]
+            } else {
+                errorLabels = []
+            }
+        }
+
         self.repCount = repCount
         self.progress = progress
         self.lastLandmarks = landmarks
-        self.errorLabels = errorLabels
         self.formQuality = formQuality
         self.isTracking = landmarks != nil
 
@@ -79,6 +116,13 @@ class WorkoutViewModel: ObservableObject {
             beginRest()
         }
     }
+
+    func dismissDangerAlert() {
+        showDangerAlert = false
+        dangerMessage = ""
+    }
+
+    // MARK: - Session control
 
     func startSession(usePoseDriven: Bool = false) {
         usePoseDrivenUpdates = usePoseDriven
@@ -120,12 +164,21 @@ class WorkoutViewModel: ObservableObject {
         feedbackTimer = nil
         clockTimer = nil
         restTimer = nil
+        riskEngine.reset()
     }
+
+    // MARK: - Rest / set management
 
     private func beginRest() {
         isResting = true
         restRemaining = restDuration
         feedbackText = "Rest"
+
+        // Flush set-level minor error summary
+        let setInsights = riskEngine.beginNewSet()
+        setEndSummary = setInsights
+        allFormInsights.append(contentsOf: setInsights)
+
         restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             if self.restRemaining > 0 {
@@ -134,11 +187,14 @@ class WorkoutViewModel: ObservableObject {
                 self.restTimer?.invalidate()
                 self.restTimer = nil
                 self.isResting = false
+                self.setEndSummary = []
                 self.currentSet += 1
                 self.feedbackText = "Set \(self.currentSet) — Go!"
             }
         }
     }
+
+    // MARK: - Helpers
 
     private func formatElapsed(_ seconds: Int) -> String {
         let m = seconds / 60

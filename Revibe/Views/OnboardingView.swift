@@ -21,7 +21,7 @@ struct OnboardingView: View {
     @State private var generationProgress: Double = 0
     @State private var generationTimer: Timer?
 
-    private let totalPages = 5
+    private let totalPages = 6
 
     private var isFormComplete: Bool {
         !goal.isEmpty && !daysPerWeek.isEmpty && !sessionLength.isEmpty
@@ -30,14 +30,30 @@ struct OnboardingView: View {
 
     private var canAdvance: Bool {
         switch currentPage {
-        case 0: return !goal.isEmpty
-        case 1: return !daysPerWeek.isEmpty
-        case 2: return !sessionLength.isEmpty
-        case 3: return !equipment.isEmpty
-        case 4: return !injuryArea.isEmpty
+        case 0: return true
+        case 1: return !goal.isEmpty
+        case 2: return !daysPerWeek.isEmpty
+        case 3: return !sessionLength.isEmpty
+        case 4: return !equipment.isEmpty
+        case 5: return !injuryArea.isEmpty
         default: return false
         }
     }
+
+    /// Step labels for the question pages (pages 1–5)
+    private var stepLabel: String {
+        switch currentPage {
+        case 1: return "Your Goals"
+        case 2: return "Your Schedule"
+        case 3: return "Your Sessions"
+        case 4: return "Your Setup"
+        case 5: return "Your Safety"
+        default: return ""
+        }
+    }
+
+    /// Number of question pages (excludes the intro page)
+    private let questionCount = 5
 
     var body: some View {
         ZStack {
@@ -47,11 +63,13 @@ struct OnboardingView: View {
                 Spacer()
 
                 VStack(spacing: DS.Spacing.lg) {
-                    progressBar
-                        .padding(.horizontal, DS.Spacing.md)
+                    if currentPage > 0 {
+                        progressBar
+                            .padding(.horizontal, DS.Spacing.md)
+                    }
 
                     questionContent
-                        .padding(.horizontal, 56)
+                        .padding(.horizontal, currentPage == 0 ? DS.Spacing.md : 56)
                 }
 
                 Spacer()
@@ -70,10 +88,13 @@ struct OnboardingView: View {
     private var progressBar: some View {
         VStack(spacing: 6) {
             HStack {
-                Text("Question \(currentPage + 1) of \(totalPages)")
+                Text("Question \(currentPage) of \(questionCount)")
                     .font(.caption)
                     .foregroundColor(DS.Colors.textMuted)
                 Spacer()
+                Text(stepLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(DS.Colors.accent)
             }
 
             GeometryReader { geo in
@@ -84,7 +105,7 @@ struct OnboardingView: View {
 
                     RoundedRectangle(cornerRadius: 4)
                         .fill(DS.Gradients.progress)
-                        .frame(width: geo.size.width * CGFloat(currentPage + 1) / CGFloat(totalPages), height: 6)
+                        .frame(width: geo.size.width * CGFloat(currentPage) / CGFloat(questionCount), height: 6)
                         .animation(.easeInOut(duration: 0.3), value: currentPage)
                 }
             }
@@ -98,43 +119,125 @@ struct OnboardingView: View {
     private var questionContent: some View {
         switch currentPage {
         case 0:
+            introPage
+        case 1:
             questionPage(
                 title: "What do you want most right now?",
+                subtitle: "We use this to shape the type of exercises in your plan.",
                 options: OnboardingOptions.goals,
                 selection: $goal
             )
-        case 1:
+        case 2:
             questionPage(
                 title: "How many days per week can you commit to?",
+                subtitle: "Your plan will fit around your availability — no pressure.",
                 options: OnboardingOptions.daysPerWeek,
                 selection: $daysPerWeek
             )
-        case 2:
+        case 3:
             questionPage(
                 title: "How long should most workouts be?",
+                subtitle: "Short or long, every session is designed to count.",
                 options: OnboardingOptions.sessionLengths,
                 selection: $sessionLength
             )
-        case 3:
+        case 4:
             questionPage(
                 title: "Where will you usually work out?",
+                subtitle: "We only suggest exercises that match what you have.",
                 options: OnboardingOptions.equipment,
                 selection: $equipment
             )
-        case 4:
+        case 5:
             injuryPage()
         default:
             EmptyView()
         }
     }
 
-    private func questionPage(title: String, options: [String], selection: Binding<String>) -> some View {
-        VStack(spacing: 20) {
-            Text(title)
-                .font(.system(size: 24, weight: .medium, design: .serif))
+    // MARK: - Intro Page
+
+    private var introPage: some View {
+        VStack(spacing: DS.Spacing.md) {
+            Text("Welcome to Revibe")
+                .font(.system(size: 26, weight: .regular, design: .serif))
                 .foregroundColor(DS.Colors.textPrimary)
-                .multilineTextAlignment(.center)
                 .tracking(-0.3)
+
+            Text("Answer a few quick questions and we'll build a plan personalized for you.")
+                .font(.subheadline)
+                .foregroundColor(DS.Colors.textMuted)
+                .multilineTextAlignment(.center)
+
+            VStack(spacing: 12) {
+                introFeatureRow(
+                    icon: "camera.viewfinder",
+                    title: "Track form with camera guidance",
+                    detail: "Real-time feedback on your movement"
+                )
+                introFeatureRow(
+                    icon: "cross.case",
+                    title: "Get safer exercise suggestions",
+                    detail: "Injury-aware recommendations"
+                )
+                introFeatureRow(
+                    icon: "figure.run",
+                    title: "Follow a plan matched to you",
+                    detail: "Built around your body and goals"
+                )
+            }
+            .padding(.top, DS.Spacing.xs)
+        }
+    }
+
+    private func introFeatureRow(icon: String, title: String, detail: String) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(DS.Colors.bgSecondary)
+                    .frame(width: 42, height: 42)
+                Image(systemName: icon)
+                    .font(.system(size: 17))
+                    .foregroundColor(DS.Colors.accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(DS.Colors.textPrimary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .fill(DS.Colors.bgSecondary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.card)
+                        .stroke(DS.Colors.border, lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Question Page
+
+    private func questionPage(title: String, subtitle: String, options: [String], selection: Binding<String>) -> some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 24, weight: .medium, design: .serif))
+                    .foregroundColor(DS.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .tracking(-0.3)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+                    .multilineTextAlignment(.center)
+            }
 
             VStack(spacing: 10) {
                 ForEach(options, id: \.self) { option in
@@ -156,15 +259,24 @@ struct OnboardingView: View {
         }
     }
 
+    // MARK: - Injury Page
+
     private func injuryPage() -> some View {
         let options = OnboardingOptions.injuryAreas
 
         return VStack(spacing: 20) {
-            Text("Any body areas you want us to be careful with?")
-                .font(.system(size: 24, weight: .medium, design: .serif))
-                .foregroundColor(DS.Colors.textPrimary)
-                .multilineTextAlignment(.center)
-                .tracking(-0.3)
+            VStack(spacing: 6) {
+                Text("Any body areas you want us to be careful with?")
+                    .font(.system(size: 24, weight: .medium, design: .serif))
+                    .foregroundColor(DS.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .tracking(-0.3)
+
+                Text("We'll avoid loading these areas and offer safer alternatives.")
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+                    .multilineTextAlignment(.center)
+            }
 
             VStack(spacing: 10) {
                 ForEach(options, id: \.self) { option in
@@ -232,17 +344,37 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var bottomArea: some View {
-        if currentPage == totalPages - 1 {
+        if currentPage == 0 {
+            // Intro page — "Get Started" button
+            Button {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentPage = 1
+                }
+            } label: {
+                Text("Get Started")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(DS.Colors.textOnAccent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(DS.Colors.accent)
+                    .cornerRadius(DS.Radius.button)
+            }
+        } else if currentPage == totalPages - 1 {
             VStack(spacing: 12) {
                 if isSubmitting {
                     generationProgressView
                 } else {
+                    // Bridge summary: benefit rows + trust signal
+                    if isFormComplete {
+                        bridgeSummary
+                    }
+
                     HStack {
                         Spacer()
                         Button {
                             Task { await submit() }
                         } label: {
-                            Text("Create My Plan")
+                            Text("Build My Revibe Plan")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(DS.Colors.textOnAccent)
                                 .padding(.vertical, 14)
@@ -255,7 +387,7 @@ struct OnboardingView: View {
 
                     HStack {
                         Spacer()
-                        Text("You can change this anytime.")
+                        Text("Adjustable anytime as your condition changes.")
                             .font(.caption)
                             .foregroundColor(DS.Colors.textMuted)
                     }
@@ -263,6 +395,42 @@ struct OnboardingView: View {
             }
         } else {
             Color.clear.frame(height: 1)
+        }
+    }
+
+    // MARK: - Bridge Summary
+
+    private var bridgeSummary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Based on your answers, you'll get:")
+                .font(.caption.weight(.medium))
+                .foregroundColor(DS.Colors.textMuted)
+
+            bridgeBenefitRow(icon: "figure.run", text: "Personalized exercise plan")
+            bridgeBenefitRow(icon: "camera.viewfinder", text: "Real-time movement feedback")
+            bridgeBenefitRow(icon: "cross.case", text: "Injury-aware recommendations")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.card)
+                .fill(DS.Colors.bgSecondary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DS.Radius.card)
+                        .stroke(DS.Colors.border, lineWidth: 1)
+                )
+        )
+    }
+
+    private func bridgeBenefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(DS.Colors.accent)
+                .frame(width: 20)
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(DS.Colors.textPrimary)
         }
     }
 

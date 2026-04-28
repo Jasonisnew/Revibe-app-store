@@ -5,6 +5,8 @@
 
 import SwiftUI
 import Supabase
+import AuthenticationServices
+import CryptoKit
 
 struct AuthView: View {
     @State private var email = ""
@@ -16,6 +18,7 @@ struct AuthView: View {
     @State private var showConfirmationAlert = false
     /// Set after a successful sign-up so we can resend the confirmation email.
     @State private var emailPendingConfirmation: String?
+    @State private var currentNonce: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,9 +30,21 @@ struct AuthView: View {
                     .foregroundColor(DS.Colors.textPrimary)
                     .tracking(-0.5)
 
-                Text(isSignUp ? "Create an account" : "Welcome back")
-                    .font(.subheadline)
-                    .foregroundColor(DS.Colors.textMuted)
+                if isSignUp {
+                    Text("AI-guided workouts for safer movement.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(DS.Colors.accent)
+
+                    Text("Revibe builds a plan around your goals, tracks your form, and helps reduce injury risk.")
+                        .font(.caption)
+                        .foregroundColor(DS.Colors.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, DS.Spacing.md)
+                } else {
+                    Text("Welcome back")
+                        .font(.subheadline)
+                        .foregroundColor(DS.Colors.textMuted)
+                }
             }
 
             Spacer().frame(height: DS.Spacing.lg)
@@ -109,6 +124,41 @@ struct AuthView: View {
 
             Spacer().frame(height: 12)
 
+            HStack(spacing: 8) {
+                Rectangle()
+                    .frame(height: 1)
+                    .foregroundColor(DS.Colors.border)
+                Text("or")
+                    .font(.caption)
+                    .foregroundColor(DS.Colors.textMuted)
+                Rectangle()
+                    .frame(height: 1)
+                    .foregroundColor(DS.Colors.border)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+
+            Spacer().frame(height: 12)
+
+            SignInWithAppleButton(
+                isSignUp ? .signUp : .signIn,
+                onRequest: { request in
+                    let nonce = randomNonceString()
+                    currentNonce = nonce
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = sha256(nonce)
+                },
+                onCompletion: { result in
+                    handleAppleSignIn(result)
+                }
+            )
+            .signInWithAppleButtonStyle(.white)
+            .frame(height: 50)
+            .cornerRadius(DS.Radius.button)
+            .padding(.horizontal, DS.Spacing.md)
+            .disabled(isLoading)
+
+            Spacer().frame(height: 12)
+
             if emailPendingConfirmation != nil {
                 Button {
                     Task { await resendConfirmationEmail() }
@@ -177,6 +227,55 @@ struct AuthView: View {
         }
 
         isLoading = false
+    }
+
+    // MARK: - Sign in with Apple
+
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard
+                let credential = auth.credential as? ASAuthorizationAppleIDCredential,
+                let tokenData = credential.identityToken,
+                let idToken = String(data: tokenData, encoding: .utf8),
+                let nonce = currentNonce
+            else {
+                errorMessage = "Apple Sign In failed: missing credential."
+                return
+            }
+            Task {
+                isLoading = true
+                errorMessage = nil
+                do {
+                    try await supabase.auth.signInWithIdToken(
+                        credentials: .init(
+                            provider: .apple,
+                            idToken: idToken,
+                            nonce: nonce
+                        )
+                    )
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                isLoading = false
+            }
+        case .failure(let error):
+            // User cancelled the sheet — don't show an error
+            if (error as? ASAuthorizationError)?.code == .canceled { return }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(randomBytes.map { charset[Int($0) % charset.count] })
+    }
+
+    private func sha256(_ input: String) -> String {
+        let hashed = SHA256.hash(data: Data(input.utf8))
+        return hashed.compactMap { String(format: "%02x", $0) }.joined()
     }
 
     private func resendConfirmationEmail() async {

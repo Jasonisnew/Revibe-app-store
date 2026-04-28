@@ -14,9 +14,11 @@ struct WorkoutView: View {
 
     @StateObject private var viewModel = WorkoutViewModel()
     @StateObject private var audioCoach = AudioCoachService()
+    @StateObject private var cadenceTracker = CadenceTracker()
     @State private var cameraManager = CameraManager()
     @State private var poseService = PoseLandmarkerService()
     @State private var lateralRaiseAnalyzer = LateralRaiseAnalyzer()
+    @State private var beatEngine = BeatAudioEngine()
     @State private var posePipelineCancellable: AnyCancellable?
     @State private var noPoseTimer: Timer? = nil
     @State private var lastDetectionTime: Date = .distantPast
@@ -84,11 +86,13 @@ struct WorkoutView: View {
         }
         .onAppear {
             lateralRaiseAnalyzer.setTargetReps(viewModel.repsPerSet)
+            wireBeatPipeline()
             viewModel.startSession(usePoseDriven: true)
             cameraManager.startSession()
             startPosePipeline()
             startNoPoseWatchdog()
             audioCoach.speakOnSessionStart()
+            beatEngine.resume()
         }
         .onDisappear {
             posePipelineCancellable = nil
@@ -96,8 +100,11 @@ struct WorkoutView: View {
             noPoseTimer = nil
             viewModel.stopSession()
             cameraManager.stopSession()
+            lateralRaiseAnalyzer.onBeatEvent = nil
             lateralRaiseAnalyzer.reset()
             audioCoach.stop()
+            beatEngine.stop()
+            cadenceTracker.reset()
         }
     }
 
@@ -453,6 +460,24 @@ struct WorkoutView: View {
                     .frame(minWidth: 100)
             }
             .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    // MARK: - Beat Pipeline
+
+    /// Wires the analyzer's beat events into the cadence tracker and the
+    /// beat audio engine. Beat audio is gated behind the existing
+    /// "Sound Effects" toggle (`audioCoach.areSFXEnabled`) so users opt in
+    /// from the existing Settings screen — no new UI is introduced.
+    private func wireBeatPipeline() {
+        let tracker = cadenceTracker
+        let engine = beatEngine
+        let coach = audioCoach
+        lateralRaiseAnalyzer.onBeatEvent = {
+            tracker.recordBeat()
+            if coach.areSFXEnabled {
+                engine.playClick()
+            }
         }
     }
 

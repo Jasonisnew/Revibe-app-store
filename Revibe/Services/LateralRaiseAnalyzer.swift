@@ -101,6 +101,13 @@ final class LateralRaiseAnalyzer {
 
     // MARK: Public API
 
+    /// Optional callback fired on every meaningful phase transition (top of raise
+    /// and return to bottom). Used by `CadenceTracker` to derive movement BPM
+    /// and by `BeatAudioEngine` to trigger audio cues in sync with the user's
+    /// movement. Set to `nil` to disable. Existing analyze/reset behavior is
+    /// unaffected when this is unset.
+    var onBeatEvent: (() -> Void)?
+
     func setTargetReps(_ reps: Int) { targetReps = max(1, reps) }
 
     func reset() {
@@ -149,21 +156,34 @@ final class LateralRaiseAnalyzer {
         // ── 3. Phase state machine ─────────────────────────────────────────
         // avgAngle is the signed degrees-from-horizontal of both arms combined.
         // restThreshold ≈ -65° (arms at side), peakThreshold ≈ -15° (near level).
+        // Beat events fire when the phase transitions to .up (top of raise) or
+        // back to .down (bottom of raise) — two musical beats per rep.
         switch phase {
         case .down:
-            if avgAngle >= peakThreshold        { phase = .up }
-            else if avgAngle > restThreshold    { phase = .goingUp }
+            if avgAngle >= peakThreshold {
+                phase = .up
+                onBeatEvent?()
+            } else if avgAngle > restThreshold {
+                phase = .goingUp
+            }
         case .goingUp:
-            if avgAngle >= peakThreshold        { phase = .up }
-            else if avgAngle <= restThreshold   { phase = .down }
+            if avgAngle >= peakThreshold {
+                phase = .up
+                onBeatEvent?()
+            } else if avgAngle <= restThreshold {
+                phase = .down
+                onBeatEvent?()
+            }
         case .up:
             if avgAngle < peakThreshold         { phase = .goingDown }
         case .goingDown:
             if avgAngle <= restThreshold {
                 phase = .down
                 repCount += 1
+                onBeatEvent?()
             } else if avgAngle >= peakThreshold {
                 phase = .up
+                onBeatEvent?()
             }
         }
 

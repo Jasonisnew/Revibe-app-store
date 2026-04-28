@@ -6,7 +6,7 @@
 import Foundation
 import Combine
 import Supabase
-import UserNotifications
+@preconcurrency import UserNotifications
 
 class PostWorkoutSummaryViewModel: ObservableObject {
     let updatedStreak: Int
@@ -131,10 +131,9 @@ class PostWorkoutSummaryViewModel: ObservableObject {
     @MainActor
     func scheduleNextWorkout() {
         guard let day = nextDay else { return }
-
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            guard granted else { return }
+        Task {
+            let center = UNUserNotificationCenter.current()
+            guard (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) == true else { return }
 
             let content = UNMutableNotificationContent()
             content.title = "Time to train"
@@ -148,11 +147,8 @@ class PostWorkoutSummaryViewModel: ObservableObject {
             let trigger = UNCalendarNotificationTrigger(dateMatching: tomorrow, repeats: false)
             let request = UNNotificationRequest(identifier: "nextWorkout", content: content, trigger: trigger)
 
-            center.add(request) { _ in
-                DispatchQueue.main.async {
-                    self.didScheduleNext = true
-                }
-            }
+            try? await center.add(request)
+            self.didScheduleNext = true
         }
     }
 

@@ -34,7 +34,7 @@ struct RevibeApp: App {
             }
             .preferredColorScheme(.dark)
             .onOpenURL { url in
-                Task { try? await supabase.auth.handle(url) }
+                Task { try? supabase.auth.handle(url) }
             }
             .task {
                 let hasSession = (try? await supabase.auth.session) != nil
@@ -42,7 +42,7 @@ struct RevibeApp: App {
                 if hasSession { await checkOnboarding() }
                 isCheckingSession = false
 
-                for await (event, session) in await supabase.auth.authStateChanges {
+                for await (event, session) in supabase.auth.authStateChanges {
                     switch event {
                     case .signedIn, .tokenRefreshed, .initialSession:
                         isAuthenticated = session != nil

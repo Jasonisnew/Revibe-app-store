@@ -64,6 +64,7 @@
 				229A86BE2F5143A20032F096 /* Frameworks */,
 				229A86BF2F5143A20032F096 /* Resources */,
 				22B1F0B02FA3220000B3764D /* Remove Static Frameworks */,
+				22B1F0C02FA3230000B3764D /* Generate Stub dSYMs */,
 			);
 			buildRules = (
 			);
@@ -167,6 +168,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# Remove static frameworks that SPM incorrectly embeds.\n# MediaPipeTasksVision is a static library (ar archive) whose code is\n# linked into the app binary. The .framework bundle must not appear in\n# the Frameworks folder or App Store validation will reject the build.\nFW_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nif [ -d \"${FW_DIR}/MediaPipeTasksVision.framework\" ]; then\n    rm -rf \"${FW_DIR}/MediaPipeTasksVision.framework\"\n    echo \"Removed static MediaPipeTasksVision.framework from app bundle\"\nfi\n";
+		};
+		22B1F0C02FA3230000B3764D /* Generate Stub dSYMs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate Stub dSYMs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${SRCROOT}/scripts/generate_stub_dsyms.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

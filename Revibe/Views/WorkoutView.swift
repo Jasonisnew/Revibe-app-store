@@ -18,8 +18,9 @@ struct WorkoutView: View {
     @State private var cameraManager = CameraManager()
     @State private var poseService = PoseLandmarkerService()
     @State private var lateralRaiseAnalyzer = LateralRaiseAnalyzer()
-    @State private var beatEngine = BeatAudioEngine()
+    @State private var musicPlayer = WorkoutMusicPlayer()
     @State private var posePipelineCancellable: AnyCancellable?
+    @State private var bpmCancellable: AnyCancellable?
     @State private var noPoseTimer: Timer? = nil
     @State private var lastDetectionTime: Date = .distantPast
     @State private var lastReportedRepCount: Int = 0
@@ -70,6 +71,13 @@ struct WorkoutView: View {
                 dangerAlertOverlay
             }
         }
+        .onChange(of: viewModel.showDangerAlert) { _, isShowing in
+            if isShowing, !viewModel.dangerMessage.isEmpty {
+                audioCoach.speakDangerWarning(viewModel.dangerMessage)
+            } else {
+                audioCoach.stop()
+            }
+        }
         .animation(.easeInOut(duration: 0.25), value: viewModel.showDangerAlert)
         .animation(.easeInOut(duration: 0.3), value: viewModel.isResting && !viewModel.setEndSummary.isEmpty)
         .navigationTitle(movementName)
@@ -87,15 +95,17 @@ struct WorkoutView: View {
         .onAppear {
             lateralRaiseAnalyzer.setTargetReps(viewModel.repsPerSet)
             wireBeatPipeline()
+            wireMusicTempoToCadence()
             viewModel.startSession(usePoseDriven: true)
             cameraManager.startSession()
             startPosePipeline()
             startNoPoseWatchdog()
             audioCoach.speakOnSessionStart()
-            beatEngine.resume()
+            musicPlayer.start(initialBPM: 90)
         }
         .onDisappear {
             posePipelineCancellable = nil
+            bpmCancellable = nil
             noPoseTimer?.invalidate()
             noPoseTimer = nil
             viewModel.stopSession()
@@ -103,7 +113,7 @@ struct WorkoutView: View {
             lateralRaiseAnalyzer.onBeatEvent = nil
             lateralRaiseAnalyzer.reset()
             audioCoach.stop()
-            beatEngine.stop()
+            musicPlayer.stop()
             cadenceTracker.reset()
         }
     }
@@ -465,20 +475,29 @@ struct WorkoutView: View {
 
     // MARK: - Beat Pipeline
 
-    /// Wires the analyzer's beat events into the cadence tracker and the
-    /// beat audio engine. Beat audio is gated behind the existing
-    /// "Sound Effects" toggle (`audioCoach.areSFXEnabled`) so users opt in
-    /// from the existing Settings screen — no new UI is introduced.
+    /// Forwards analyzer beat events into the cadence tracker. The tracker's
+    /// smoothed BPM is observed separately by `wireMusicTempoToCadence()` and
+    /// drives the workout music's playback tempo.
     private func wireBeatPipeline() {
         let tracker = cadenceTracker
-        let engine = beatEngine
-        let coach = audioCoach
         lateralRaiseAnalyzer.onBeatEvent = {
             tracker.recordBeat()
-            if coach.areSFXEnabled {
-                engine.playClick()
-            }
         }
+    }
+
+    /// Subscribes to the cadence tracker's smoothed BPM and feeds it into the
+    /// procedural music player. The player time-stretches its loop without
+    /// pitch shift so the music's tempo follows the user's actual movement.
+    /// Each "beat" the analyzer emits is half a rep (top + bottom of raise),
+    /// so the cadence already corresponds nicely to a musical pulse.
+    private func wireMusicTempoToCadence() {
+        let player = musicPlayer
+        bpmCancellable = cadenceTracker.$bpm
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { bpm in
+                player.setBPM(bpm)
+            }
     }
 
     // MARK: - Pose Pipeline
@@ -507,11 +526,6 @@ struct WorkoutView: View {
                     formErrors: result.formErrors,
                     formQuality: result.formQuality
                 )
-
-                // Fire danger warning voice cue (bypasses throttle)
-                if viewModel.showDangerAlert && !viewModel.dangerMessage.isEmpty {
-                    audioCoach.speakDangerWarning(viewModel.dangerMessage)
-                }
 
                 // Fire encouragement on rep completion
                 let newRepCount = viewModel.repCount

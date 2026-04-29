@@ -5,6 +5,7 @@
 
 import Foundation
 import AVFoundation
+import Combine
 
 // MARK: - Motivation Mode
 
@@ -192,13 +193,15 @@ final class AudioCoachService: ObservableObject {
     }
 
     private func configureAudioSession() {
-        if allowBackgroundMusic {
-            // Mix with user's music — don't interrupt it
-            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-        } else {
-            // Ambient: TTS plays but ducking/interruption follows system policy
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-        }
+        // Use `.playback` so workout music + TTS coaching play at full volume
+        // even with the silent switch on. `.mixWithOthers` keeps the user's
+        // own background music (Spotify, Apple Music, etc.) playing alongside.
+        // `.duckOthers` is added when the user opts into background music so
+        // their music dips slightly while the coach speaks.
+        let options: AVAudioSession.CategoryOptions = allowBackgroundMusic
+            ? [.mixWithOthers, .duckOthers]
+            : [.mixWithOthers]
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: options)
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 }
